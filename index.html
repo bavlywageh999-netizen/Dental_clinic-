@@ -75,8 +75,9 @@ nav a:hover{opacity:1;text-decoration:underline;text-underline-offset:6px}
 label,legend{display:block;font-weight:600;font-size:.93rem;margin-bottom:.35rem;padding:0}
 fieldset{border:0;padding:0;margin:0 0 1rem}
 input,select,textarea{width:100%;font:inherit;color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:.7rem .85rem}
-input,select,textarea{-webkit-appearance:none;appearance:none;box-sizing:border-box;min-height:3rem;margin:0;font-size:16px}
-select{background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234b6a73' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>") no-repeat right .85rem center;padding-inline-end:2.4rem;text-overflow:ellipsis}
+input:not([type="date"]),textarea{-webkit-appearance:none;appearance:none}
+input,select,textarea{box-sizing:border-box;min-height:3rem;margin:0;font-size:16px}
+select{-webkit-appearance:menulist;appearance:auto;text-overflow:ellipsis}
 html[dir="rtl"] select{background-position:left .85rem center}
 input[type="date"]{display:block;min-width:0;text-align:start;line-height:1.4;background-color:#fff}
 input[type="date"]::-webkit-date-and-time-value{text-align:start;min-height:1.4em;margin:0}
@@ -880,6 +881,14 @@ html[dir="rtl"] .af input{padding:.5rem 0 .5rem 2.2rem}
     });
   }
   dateEl.addEventListener("change", refreshSlots);
+
+  // Block past (and too-far) dates, even where the phone's date picker allows them
+  dateEl.addEventListener("change", function(){
+    var v = dateEl.value;
+    if(v && v < dateEl.min){ dateEl.value = ""; setErr("date", t("Choose today or a later date.")); refreshSlots(); }
+    else if(v && v > dateEl.max){ dateEl.value = ""; setErr("date", t("Choose a date.")); refreshSlots(); }
+    else setErr("date", "");
+  });
 
   function setErr(id,msg){ $("e-"+id).textContent = msg || ""; }
 
