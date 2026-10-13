@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Clinic admin</title>
+<style>
+body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#eef3f2;color:#10242c}
+.box{max-width:340px;margin:18vh auto;background:#fff;padding:1.6rem;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
+input,button{font:inherit;padding:.6rem .8rem;border-radius:10px;border:1px solid #b9cfcb;width:100%;box-sizing:border-box;margin-top:.6rem}
+button{background:#0b4d5b;color:#fff;border:0;cursor:pointer;width:auto}
+main{max-width:1100px;margin:0 auto;padding:1rem}
+header{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin:1rem 0}
+.card,.panel{background:#fff;border-radius:14px;padding:1rem}
+.card b{display:block;font-size:1.8rem}
+.panel{margin-bottom:1rem;overflow-x:auto}
+.bar{display:flex;align-items:center;gap:.6rem;margin:.3rem 0}
+.bar i{display:block;height:14px;background:#2aa7a7;border-radius:7px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:.5rem;border-bottom:1px solid #e1ecea;vertical-align:top}
+details div{font-size:.9rem;color:#456;margin-top:.25rem}
+.warn{font-size:.85rem;color:#7a5b00;background:#fff6d6;border-radius:10px;padding:.6rem .8rem}
+</style></head><body>
+<div class="box" id="gate"><h1 id="gt" style="font-size:1.3rem;margin:0"></h1>
+<input id="em" type="email" autocomplete="username" aria-label="Email" placeholder="Admin email"><input id="pw" type="password" autocomplete="current-password" aria-label="Password"><button id="go"></button>
+<p id="gm" style="color:#b3261e;margin:.6rem 0 0"></p></div>
+<main id="app" hidden>
+<header><h1 style="margin:0">Patients overview</h1><button id="csv">Download CSV</button></header>
+<p class="warn" id="note">Loading…</p>
+<div class="cards" id="cards"></div>
+<div class="panel"><h2 style="margin-top:0">Requests by treatment</h2><div id="chart"></div></div>
+<div class="panel"><h2 style="margin-top:0">Patients who joined</h2>
+<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Joined</th><th>Requests</th><th>What they did</th></tr></thead><tbody id="rows"></tbody></table></div>
+</main>
+<script>
+var $=function(i){return document.getElementById(i)};
+function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
+async function sha(s){
+  try{var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("clinic-admin:"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
+  catch(e){return btoa(unescape(encodeURIComponent("clinic-admin:"+s)))}
+}
+function h(tag,txt,parent,cls){var e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}
+function q(s){s=String(s==null?"":s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
+function fmt(t){var d=new Date(t);return d.toLocaleDateString()+" "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+var SB="https://rxlbhnaumwnzmxbsmivq.supabase.co",KEY="sb_publishable_Hy2bPPGODEsbWO7unCdNhg_d1FyvPpq",REMOTE=[],L=[];
+$("gt").textContent="Admin login";
+$("go").textContent="Log in";
+$("go").onclick=async function(){
+  $("gm").textContent="";
+  try{
+    var r=await fetch(SB+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:KEY,"Content-Type":"application/json"},body:JSON.stringify({email:$("em").value.trim(),password:$("pw").value})});
+    var j=await r.json();
+    if(!r.ok||!j.access_token){$("gm").textContent="Wrong email or password.";return}
+    var d=await fetch(SB+"/rest/v1/clinic_events?select=*&order=t.asc&limit=5000",{headers:{apikey:KEY,Authorization:"Bearer "+j.access_token}});
+    if(!d.ok){$("gm").textContent="Logged in, but could not read the data. Check the database setup.";return}
+    REMOTE=(await d.json()).map(function(x){return {t:x.t,type:x.type,email:x.email,name:x.name,provider:x.provider,phone:x.phone,service:x.service,date:x.req_date,time:x.req_time,notes:x.notes}});
+  }catch(e){$("gm").textContent="No connection. Try again.";return}
+  try{localStorage.setItem("clinic-admin",JSON.stringify("ok"))}catch(e){}
+  $("note").textContent="Showing all patients from the database.";
+  $("gate").hidden=true;$("app").hidden=false;show();
+};
+$("pw").onkeydown=function(e){if(e.key==="Enter")$("go").click()};
+function show(){
+  var log=REMOTE,users={},P={};
+  function get(e,n){return P[e]||(P[e]={name:n||"",email:e,phone:"",joined:"",events:[],reqs:[]})}
+  Object.keys(users).forEach(function(e){get(e,users[e].name)});
+  log.forEach(function(v){
+    var p=get(v.email,v.name);
+    if(!p.joined||v.t<p.joined)p.joined=v.t;
+    p.events.push(v);
+    if(v.type==="request"){p.reqs.push(v);if(v.phone)p.phone=v.phone}
+  });
+  L=Object.keys(P).map(function(k){return P[k]}).sort(function(a,b){return a.joined<b.joined?1:-1});
+  var reqs=log.filter(function(v){return v.type==="request"}),wk=Date.now()-6048e5,T={};
+  var n7=reqs.filter(function(v){return Date.parse(v.t)>wk}).length;
+  reqs.forEach(function(v){T[v.service]=(T[v.service]||0)+1});
+  $("cards").textContent="";
+  [["Patients joined",L.length],["Requests",reqs.length],["Requests, last 7 days",n7]].forEach(function(c){var d=h("div",null,$("cards"),"card");h("b",c[1],d);h("span",c[0],d)});
+  $("chart").textContent="";
+  var keys=Object.keys(T).sort(function(a,b){return T[b]-T[a]}),max=keys.length?T[keys[0]]:1;
+  if(!keys.length)h("p","No requests yet.",$("chart"));
+  keys.forEach(function(k){var r=h("div",null,$("chart"),"bar");h("span",k+" ("+T[k]+")",r).style.minWidth="150px";h("i",null,r).style.width=(T[k]/max*100)+"%"});
+  $("rows").textContent="";
+  if(!L.length){var e=h("tr",null,$("rows")),c=h("td","No patients yet.",e);c.colSpan=6}
+  L.forEach(function(p){
+    var tr=h("tr",null,$("rows"));
+    h("td",p.name,tr);h("td",p.email,tr);h("td",p.phone||"—",tr);
+    h("td",p.joined?new Date(p.joined).toLocaleDateString():"",tr);h("td",p.reqs.length,tr);
+    var d=h("details",null,h("td",null,tr));h("summary",p.events.length+" actions",d);
+    p.events.slice().reverse().forEach(function(v){
+      var txt=fmt(v.t)+" — ";
+      if(v.type==="signup")txt+="Signed up";
+      else if(v.type==="login")txt+="Logged in"+(v.provider&&v.provider!=="email"?" with "+v.provider:"");
+      else txt+="Requested "+v.service+" for "+(v.date||"?")+" "+(v.time||"")+(v.notes?" · Note: "+v.notes:"");
+      h("div",txt,d);
+    });
+  });
+}
+$("csv").onclick=function(){
+  var rows=[["Name","Email","Phone","Joined","Requests","Last treatment","Last activity"]].concat(L.map(function(p){
+    var l=p.reqs[p.reqs.length-1],a=p.events[p.events.length-1];
+    return [p.name,p.email,p.phone,p.joined,p.reqs.length,l?l.service:"",a?a.t:""]}));
+  var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.map(function(r){return r.map(q).join(",")}).join("\n")],{type:"text/csv"}));
+  a.download="patients.csv";a.click();
+};
+</script></body></html>
